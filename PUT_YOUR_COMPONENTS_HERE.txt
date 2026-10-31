@@ -1,0 +1,4 @@
+Copy your 6 component files into this folder:
+  Dashboard.tsx, Companies.tsx, Rates.tsx,
+  TiffinEntries.tsx, RefreshmentEntries.tsx, Bills.tsx
+The frontend will not build until they are here (App.tsx imports them).

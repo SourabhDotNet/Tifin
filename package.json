@@ -1,0 +1,10 @@
+{
+  "name": "tiffin-billing",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=20.19" },
+  "scripts": {
+    "build": "npm --prefix backend install && npm --prefix frontend install --include=dev && npm --prefix frontend run build",
+    "start": "node backend/server.js"
+  }
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Billing API Test</title>
+<style>
+:root{--bg:#f8fafc;--fg:#1e293b;--card:#fff;--bd:#cbd5e1;--ac:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e2e8f0;--card:#1e293b;--bd:#475569;--ac:#60a5fa}}
+body{margin:0;padding:12px;font:16px -apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--fg)}
+section{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
+h2{margin:0 0 8px;font-size:17px}
+input,select,button{font:inherit;padding:10px;margin:3px 0;width:100%;box-sizing:border-box;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{background:var(--ac);color:#fff;border:0;font-weight:600}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+a.btn{display:block;text-align:center;padding:10px;margin:3px 0;border:1px solid var(--ac);border-radius:8px;color:var(--ac);text-decoration:none;font-weight:600}
+pre{white-space:pre-wrap;word-break:break-word;font-size:13px;margin:6px 0 0}
+#msg{position:sticky;top:0;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--bd);margin-bottom:10px;font-size:14px}
+</style></head><body>
+<div id="msg">Ready.</div>
+
+<section><h2>1. Company</h2>
+<input id="cname" placeholder="Company name">
+<button onclick="addCompany()">Add company</button>
+<select id="company" onchange="loadRates()"></select></section>
+
+<section><h2>2. Rates (Rs.)</h2>
+<div class="row">
+<input id="r_regular_tiffin_rate" type="number" inputmode="decimal" placeholder="Regular tiffin">
+<input id="r_dahi_tiffin_rate" type="number" inputmode="decimal" placeholder="Dahi tiffin">
+<input id="r_nasta_rate" type="number" inputmode="decimal" placeholder="Nasta">
+<input id="r_tea_rate" type="number" inputmode="decimal" placeholder="Tea">
+<input id="r_milk_rate" type="number" inputmode="decimal" placeholder="Milk / L">
+<input id="r_chapati_rate" type="number" inputmode="decimal" placeholder="Chapati">
+</div><button onclick="saveRates()">Save rates (blank = 0)</button></section>
+
+<section><h2>3. Daily entry</h2>
+<div class="row"><input id="edate" type="date"><input id="ereq" placeholder="Requisition no."></div>
+<div class="row"><input id="e_reg" type="number" placeholder="Regular tiffin"><input id="e_dahi" type="number" placeholder="Dahi tiffin"></div>
+<button onclick="addTiffin()">Add tiffin entry</button>
+<div class="row"><input id="e_nasta" type="number" placeholder="Nasta"><input id="e_tea" type="number" placeholder="Tea"></div>
+<div class="row"><input id="e_milk" type="number" step="0.01" placeholder="Milk litres"><input id="e_chap" type="number" placeholder="Chapati"></div>
+<button onclick="addRefresh()">Add refreshment entry</button></section>
+
+<section><h2>4. Monthly bill</h2>
+<div class="row"><input id="bm" type="number" min="1" max="12" placeholder="Month"><input id="by" type="number" placeholder="Year"></div>
+<div class="row"><button onclick="preview('tiffin')">Preview tiffin</button><button onclick="preview('refreshment')">Preview nasta</button></div>
+<div id="dl"></div><pre id="out"></pre></section>
+
+<script>
+const $=id=>document.getElementById(id), msg=t=>$('msg').textContent=t;
+const d=new Date(); $('edate').value=d.toISOString().slice(0,10); $('bm').value=d.getMonth()+1; $('by').value=d.getFullYear();
+async function api(method,url,body){
+  const r=await fetch('/api'+url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({})); msg((r.ok?'OK ':'ERROR ')+r.status+(j.error?': '+j.error:'')); if(!r.ok) throw new Error(j.error); return j;
+}
+const cid=()=>$('company').value;
+async function loadCompanies(){const l=await api('GET','/companies');$('company').innerHTML=l.map(c=>`<option value="${c.id}">${c.name}${c.is_active?'':' (inactive)'}</option>`).join('');if(l.length)loadRates();}
+async function addCompany(){await api('POST','/companies',{name:$('cname').value});$('cname').value='';loadCompanies();}
+const RK=['regular_tiffin_rate','dahi_tiffin_rate','nasta_rate','tea_rate','milk_rate','chapati_rate'];
+async function loadRates(){if(!cid())return;const r=await api('GET','/rates/'+cid());RK.forEach(k=>$('r_'+k).value=r[k]);}
+async function saveRates(){const b={};RK.forEach(k=>b[k]=$('r_'+k).value);await api('POST','/rates/'+cid(),b);}
+const base=()=>({company_id:cid(),entry_date:$('edate').value,requisition_no:$('ereq').value});
+async function addTiffin(){await api('POST','/tiffin-entries',{...base(),regular_tiffin_count:$('e_reg').value,dahi_tiffin_count:$('e_dahi').value});}
+async function addRefresh(){await api('POST','/refreshment-entries',{...base(),nasta_count:$('e_nasta').value,tea_count:$('e_tea').value,milk_litres:$('e_milk').value,chapati_count:$('e_chap').value});}
+async function preview(t){
+  const q=`?company_id=${cid()}&month=${$('bm').value}&year=${$('by').value}`;
+  const b=await api('GET',`/bills/${t}/preview${q}`);
+  $('out').textContent=JSON.stringify({entries:b.entries.length,totals:b.totals,amounts:b.amounts},null,2);
+  $('dl').innerHTML=`<a class="btn" href="/api/bills/${t}/pdf${q}">Download PDF</a><a class="btn" href="/api/bills/${t}/excel${q}">Download Excel</a>`;
+}
+loadCompanies().catch(()=>{});
+</script></body></html>
