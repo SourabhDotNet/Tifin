@@ -11,9 +11,15 @@ import Bills from './components/Bills';
 // Vite dev runs on port 5173, so point to Express on port 5000.
 // In production, served from same port, so relative path is fine.
 const API_BASE = window.location.port === '5173' ? 'http://localhost:5000/api' : '/api';
+const today = () => new Date().toLocaleDateString('en-CA');
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [entryDate, setEntryDate] = useState(today);
+
+  function resetEntryDate() {
+    setEntryDate(today());
+  }
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
@@ -33,11 +39,11 @@ export default function App() {
       case 'rates':
         return <Rates API_BASE={API_BASE} />;
       case 'tiffin':
-        return <TiffinEntries API_BASE={API_BASE} />;
+        return <TiffinEntries API_BASE={API_BASE} entryDate={entryDate} onEntryDateChange={setEntryDate} />;
       case 'refreshment':
-        return <RefreshmentEntries API_BASE={API_BASE} />;
+        return <RefreshmentEntries API_BASE={API_BASE} entryDate={entryDate} onEntryDateChange={setEntryDate} />;
       case 'bills':
-        return <Bills API_BASE={API_BASE} />;
+        return <Bills API_BASE={API_BASE} onBillExport={resetEntryDate} />;
       default:
         return <Dashboard setView={setCurrentView} API_BASE={API_BASE} />;
     }

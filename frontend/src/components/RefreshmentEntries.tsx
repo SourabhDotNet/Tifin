@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Coffee, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { currentMonthYear, formatDate, requestJson } from './api';
 
-type Props = { API_BASE: string };
+type Props = { API_BASE: string; entryDate: string; onEntryDateChange: (date: string) => void };
 type Company = { id: number; name: string; is_active: number };
 type Entry = {
   id: number;
@@ -24,10 +24,9 @@ type EntryForm = {
   milk_litres: string;
   chapati_count: string;
 };
-const today = new Date().toLocaleDateString('en-CA');
-const emptyForm = (): EntryForm => ({
+const emptyForm = (entryDate: string): EntryForm => ({
   company_id: '',
-  entry_date: today,
+  entry_date: entryDate,
   requisition_no: '',
   nasta_count: '0',
   tea_count: '0',
@@ -36,7 +35,7 @@ const emptyForm = (): EntryForm => ({
 });
 const inputClass = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
-export default function RefreshmentEntries({ API_BASE }: Props) {
+export default function RefreshmentEntries({ API_BASE, entryDate, onEntryDateChange }: Props) {
   const initialPeriod = currentMonthYear();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -44,7 +43,7 @@ export default function RefreshmentEntries({ API_BASE }: Props) {
   const [month, setMonth] = useState(String(initialPeriod.month));
   const [year, setYear] = useState(String(initialPeriod.year));
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState<EntryForm>(emptyForm);
+  const [form, setForm] = useState<EntryForm>(() => emptyForm(entryDate));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [totals, setTotals] = useState({ nasta: 0, tea: 0, milk: 0, chapati: 0 });
   const [loading, setLoading] = useState(true);
@@ -99,9 +98,9 @@ export default function RefreshmentEntries({ API_BASE }: Props) {
     return () => { active = false; };
   }, [API_BASE, companyFilter, entries, month, year]);
 
-  function resetForm() {
+  function resetForm(nextEntryDate = entryDate) {
     setEditingId(null);
-    setForm({ ...emptyForm(), company_id: companyFilter });
+    setForm({ ...emptyForm(nextEntryDate), company_id: companyFilter });
   }
 
   function editEntry(entry: Entry) {
@@ -137,7 +136,8 @@ export default function RefreshmentEntries({ API_BASE }: Props) {
         body: JSON.stringify(form),
       });
       setNotice(editingId ? 'Nasta entry updated.' : 'Nasta entry added.');
-      resetForm();
+      onEntryDateChange(form.entry_date);
+      resetForm(form.entry_date);
       await refreshEntries();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save nasta entry.');
@@ -172,7 +172,7 @@ export default function RefreshmentEntries({ API_BASE }: Props) {
       <form onSubmit={saveEntry} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-slate-900">{editingId ? 'Edit nasta entry' : 'Add nasta entry'}</h2>
-          {editingId && <button type="button" onClick={resetForm} aria-label="Cancel editing" className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>}
+          {editingId && <button type="button" onClick={() => resetForm()} aria-label="Cancel editing" className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>}
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm font-medium text-slate-700">Company *

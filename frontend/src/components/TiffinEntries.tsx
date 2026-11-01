@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Pencil, Plus, Search, Trash2, Utensils, X } from 'lucide-react';
 import { currentMonthYear, formatDate, requestJson } from './api';
 
-type Props = { API_BASE: string };
+type Props = { API_BASE: string; entryDate: string; onEntryDateChange: (date: string) => void };
 type Company = { id: number; name: string; is_active: number };
 type Entry = {
   id: number;
@@ -20,17 +20,16 @@ type EntryForm = {
   regular_tiffin_count: string;
   dahi_tiffin_count: string;
 };
-const today = new Date().toLocaleDateString('en-CA');
-const emptyForm = (): EntryForm => ({
+const emptyForm = (entryDate: string): EntryForm => ({
   company_id: '',
-  entry_date: today,
+  entry_date: entryDate,
   requisition_no: '',
   regular_tiffin_count: '0',
   dahi_tiffin_count: '0',
 });
 const inputClass = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
-export default function TiffinEntries({ API_BASE }: Props) {
+export default function TiffinEntries({ API_BASE, entryDate, onEntryDateChange }: Props) {
   const initialPeriod = currentMonthYear();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -38,7 +37,7 @@ export default function TiffinEntries({ API_BASE }: Props) {
   const [month, setMonth] = useState(String(initialPeriod.month));
   const [year, setYear] = useState(String(initialPeriod.year));
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState<EntryForm>(emptyForm);
+  const [form, setForm] = useState<EntryForm>(() => emptyForm(entryDate));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [totals, setTotals] = useState({ regular: 0, dahi: 0 });
   const [loading, setLoading] = useState(true);
@@ -89,9 +88,9 @@ export default function TiffinEntries({ API_BASE }: Props) {
     return () => { active = false; };
   }, [API_BASE, companyFilter, entries, month, year]);
 
-  function resetForm() {
+  function resetForm(nextEntryDate = entryDate) {
     setEditingId(null);
-    setForm({ ...emptyForm(), company_id: companyFilter });
+    setForm({ ...emptyForm(nextEntryDate), company_id: companyFilter });
   }
 
   function editEntry(entry: Entry) {
@@ -118,7 +117,8 @@ export default function TiffinEntries({ API_BASE }: Props) {
         body: JSON.stringify(form),
       });
       setNotice(editingId ? 'Tiffin entry updated.' : 'Tiffin entry added.');
-      resetForm();
+      onEntryDateChange(form.entry_date);
+      resetForm(form.entry_date);
       const params = new URLSearchParams({ month, year });
       if (companyFilter) params.set('company_id', companyFilter);
       if (search.trim()) params.set('requisition_no', search.trim());
@@ -159,7 +159,7 @@ export default function TiffinEntries({ API_BASE }: Props) {
       <form onSubmit={saveEntry} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-slate-900">{editingId ? 'Edit tiffin entry' : 'Add tiffin entry'}</h2>
-          {editingId && <button type="button" onClick={resetForm} aria-label="Cancel editing" className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>}
+          {editingId && <button type="button" onClick={() => resetForm()} aria-label="Cancel editing" className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>}
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="text-sm font-medium text-slate-700">Company *

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Download, FileSpreadsheet, FileText, ReceiptText } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Pencil, ReceiptText, Trash2, X } from 'lucide-react';
 import { currentMonthYear, formatDate, formatMoney, requestJson } from './api';
 
-type Props = { API_BASE: string };
+type Props = { API_BASE: string; onBillExport: () => void };
 type Company = { id: number; name: string; is_active: number };
 type Period = { month: number; monthName: string; year: number };
 type TiffinBill = {
@@ -24,9 +24,12 @@ type RefreshmentBill = {
   amounts: { nastaAmount: number; teaAmount: number; milkAmount: number; chapatiAmount: number; grandTotal: number };
 };
 type Bill = TiffinBill | RefreshmentBill;
+type EditingEntry =
+  | { kind: 'tiffin'; id: number; entry_date: string; requisition_no: string; regular_tiffin_count: string; dahi_tiffin_count: string }
+  | { kind: 'refreshment'; id: number; entry_date: string; requisition_no: string; nasta_count: string; tea_count: string; milk_litres: string; chapati_count: string };
 const inputClass = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
-export default function Bills({ API_BASE }: Props) {
+export default function Bills({ API_BASE, onBillExport }: Props) {
   const period = currentMonthYear();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState('');
@@ -36,6 +39,8 @@ export default function Bills({ API_BASE }: Props) {
   const [bill, setBill] = useState<Bill | null>(null);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [loadingBill, setLoadingBill] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<EditingEntry | null>(null);
+  const [savingEntry, setSavingEntry] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -74,6 +79,59 @@ export default function Bills({ API_BASE }: Props) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to generate bill preview.');
     } finally {
       setLoadingBill(false);
+    }
+  }
+
+  async function saveEntry(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!bill || !editingEntry) return;
+
+    setSavingEntry(true);
+    setError('');
+    const isTiffin = editingEntry.kind === 'tiffin';
+    const payload = isTiffin
+      ? {
+          company_id: bill.company.id,
+          entry_date: editingEntry.entry_date,
+          requisition_no: editingEntry.requisition_no,
+          regular_tiffin_count: editingEntry.regular_tiffin_count,
+          dahi_tiffin_count: editingEntry.dahi_tiffin_count,
+        }
+      : {
+          company_id: bill.company.id,
+          entry_date: editingEntry.entry_date,
+          requisition_no: editingEntry.requisition_no,
+          nasta_count: editingEntry.nasta_count,
+          tea_count: editingEntry.tea_count,
+          milk_litres: editingEntry.milk_litres,
+          chapati_count: editingEntry.chapati_count,
+        };
+
+    try {
+      await requestJson(`${API_BASE}/${isTiffin ? 'tiffin' : 'refreshment'}-entries/${editingEntry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      setEditingEntry(null);
+      await loadBill();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update entry.');
+    } finally {
+      setSavingEntry(false);
+    }
+  }
+
+  async function deleteEntry(id: number, requisitionNo: string) {
+    if (!bill || !window.confirm(`Delete requisition ${requisitionNo} for ${bill.company.name}?`)) return;
+
+    setError('');
+    try {
+      const entryType = bill.billType === 'TIFFIN' ? 'tiffin' : 'refreshment';
+      await requestJson(`${API_BASE}/${entryType}-entries/${id}`, { method: 'DELETE' });
+      await loadBill();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete entry.');
     }
   }
 
@@ -140,10 +198,10 @@ export default function Bills({ API_BASE }: Props) {
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-700">{bill.period.monthName} {bill.period.year}</p>
               <div className="mt-3 flex flex-wrap justify-end gap-2">
-                <a href={exportUrl('pdf')} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <a href={exportUrl('pdf')} onClick={onBillExport} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                   <FileText className="h-4 w-4" /> PDF <Download className="h-3.5 w-3.5" />
                 </a>
-                <a href={exportUrl('excel')} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <a href={exportUrl('excel')} onClick={onBillExport} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                   <FileSpreadsheet className="h-4 w-4" /> Excel <Download className="h-3.5 w-3.5" />
                 </a>
               </div>
@@ -153,9 +211,9 @@ export default function Bills({ API_BASE }: Props) {
           {bill.billType === 'TIFFIN' ? (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead className="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Requisition</th><th className="px-5 py-3 text-right">Regular</th><th className="px-5 py-3 text-right">Dahi</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">{bill.entries.map((entry) => <tr key={entry.id}><td className="px-5 py-3 text-slate-600">{formatDate(entry.date)}</td><td className="px-5 py-3 text-slate-600">{entry.requisitionNo}</td><td className="px-5 py-3 text-right">{entry.regularTiffinCount}</td><td className="px-5 py-3 text-right">{entry.dahiTiffinCount}</td></tr>)}</tbody>
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Requisition</th><th className="px-5 py-3 text-right">Regular</th><th className="px-5 py-3 text-right">Dahi</th><th className="px-5 py-3 text-right">Actions</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{bill.entries.map((entry) => <tr key={entry.id}><td className="px-5 py-3 text-slate-600">{formatDate(entry.date)}</td><td className="px-5 py-3 text-slate-600">{entry.requisitionNo}</td><td className="px-5 py-3 text-right">{entry.regularTiffinCount}</td><td className="px-5 py-3 text-right">{entry.dahiTiffinCount}</td><td className="px-5 py-2"><div className="flex justify-end gap-1"><button type="button" title="Edit entry" aria-label={`Edit requisition ${entry.requisitionNo}`} onClick={() => setEditingEntry({ kind: 'tiffin', id: entry.id, entry_date: entry.date, requisition_no: entry.requisitionNo, regular_tiffin_count: String(entry.regularTiffinCount), dahi_tiffin_count: String(entry.dahiTiffinCount) })} className="rounded-md p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Pencil className="h-4 w-4" /></button><button type="button" title="Delete entry" aria-label={`Delete requisition ${entry.requisitionNo}`} onClick={() => void deleteEntry(entry.id, entry.requisitionNo)} className="rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
                   <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-800"><tr><td colSpan={2} className="px-5 py-3">Monthly total</td><td className="px-5 py-3 text-right">{bill.totals.regularTiffinCount}</td><td className="px-5 py-3 text-right">{bill.totals.dahiTiffinCount}</td></tr></tfoot>
                 </table>
               </div>
@@ -168,9 +226,9 @@ export default function Bills({ API_BASE }: Props) {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[780px] text-left text-sm">
-                  <thead className="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Requisition</th><th className="px-5 py-3 text-right">Nasta</th><th className="px-5 py-3 text-right">Tea</th><th className="px-5 py-3 text-right">Milk (L)</th><th className="px-5 py-3 text-right">Chapati</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">{bill.entries.map((entry) => <tr key={entry.id}><td className="px-5 py-3 text-slate-600">{formatDate(entry.date)}</td><td className="px-5 py-3 text-slate-600">{entry.requisitionNo}</td><td className="px-5 py-3 text-right">{entry.nastaCount}</td><td className="px-5 py-3 text-right">{entry.teaCount}</td><td className="px-5 py-3 text-right">{Number(entry.milkLitres).toFixed(2)}</td><td className="px-5 py-3 text-right">{entry.chapatiCount}</td></tr>)}</tbody>
+                <table className="w-full min-w-[920px] text-left text-sm">
+                  <thead className="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Requisition</th><th className="px-5 py-3 text-right">Nasta</th><th className="px-5 py-3 text-right">Tea</th><th className="px-5 py-3 text-right">Milk (L)</th><th className="px-5 py-3 text-right">Chapati</th><th className="px-5 py-3 text-right">Actions</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{bill.entries.map((entry) => <tr key={entry.id}><td className="px-5 py-3 text-slate-600">{formatDate(entry.date)}</td><td className="px-5 py-3 text-slate-600">{entry.requisitionNo}</td><td className="px-5 py-3 text-right">{entry.nastaCount}</td><td className="px-5 py-3 text-right">{entry.teaCount}</td><td className="px-5 py-3 text-right">{Number(entry.milkLitres).toFixed(2)}</td><td className="px-5 py-3 text-right">{entry.chapatiCount}</td><td className="px-5 py-2"><div className="flex justify-end gap-1"><button type="button" title="Edit entry" aria-label={`Edit requisition ${entry.requisitionNo}`} onClick={() => setEditingEntry({ kind: 'refreshment', id: entry.id, entry_date: entry.date, requisition_no: entry.requisitionNo, nasta_count: String(entry.nastaCount), tea_count: String(entry.teaCount), milk_litres: String(entry.milkLitres), chapati_count: String(entry.chapatiCount) })} className="rounded-md p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Pencil className="h-4 w-4" /></button><button type="button" title="Delete entry" aria-label={`Delete requisition ${entry.requisitionNo}`} onClick={() => void deleteEntry(entry.id, entry.requisitionNo)} className="rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
                   <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-800"><tr><td colSpan={2} className="px-5 py-3">Monthly total</td><td className="px-5 py-3 text-right">{bill.totals.nastaCount}</td><td className="px-5 py-3 text-right">{bill.totals.teaCount}</td><td className="px-5 py-3 text-right">{bill.totals.milkLitres.toFixed(2)}</td><td className="px-5 py-3 text-right">{bill.totals.chapatiCount}</td></tr></tfoot>
                 </table>
               </div>
@@ -185,6 +243,56 @@ export default function Bills({ API_BASE }: Props) {
           )}
           {bill.entries.length === 0 && <p className="border-t border-slate-100 px-5 py-4 text-center text-sm text-slate-500">No entries for this company and month. The bill total is zero.</p>}
         </section>
+      )}
+
+      {editingEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="edit-bill-entry-title" className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 id="edit-bill-entry-title" className="text-lg font-semibold text-slate-900">Edit requisition {editingEntry.requisition_no}</h2>
+              <button type="button" onClick={() => setEditingEntry(null)} aria-label="Close edit dialog" className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={saveEntry} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm font-medium text-slate-700">Date *
+                  <input required type="date" className={inputClass} value={editingEntry.entry_date} onChange={(event) => setEditingEntry({ ...editingEntry, entry_date: event.target.value })} />
+                </label>
+                <label className="text-sm font-medium text-slate-700">Requisition number *
+                  <input required className={inputClass} value={editingEntry.requisition_no} onChange={(event) => setEditingEntry({ ...editingEntry, requisition_no: event.target.value })} />
+                </label>
+                {editingEntry.kind === 'tiffin' ? (
+                  <>
+                    <label className="text-sm font-medium text-slate-700">Regular tiffins
+                      <input type="number" min="0" step="1" className={inputClass} value={editingEntry.regular_tiffin_count} onChange={(event) => setEditingEntry({ ...editingEntry, regular_tiffin_count: event.target.value })} />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">Dahi tiffins
+                      <input type="number" min="0" step="1" className={inputClass} value={editingEntry.dahi_tiffin_count} onChange={(event) => setEditingEntry({ ...editingEntry, dahi_tiffin_count: event.target.value })} />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="text-sm font-medium text-slate-700">Nasta
+                      <input type="number" min="0" step="1" className={inputClass} value={editingEntry.nasta_count} onChange={(event) => setEditingEntry({ ...editingEntry, nasta_count: event.target.value })} />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">Tea
+                      <input type="number" min="0" step="1" className={inputClass} value={editingEntry.tea_count} onChange={(event) => setEditingEntry({ ...editingEntry, tea_count: event.target.value })} />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">Milk (litres)
+                      <input type="number" min="0" step="0.01" className={inputClass} value={editingEntry.milk_litres} onChange={(event) => setEditingEntry({ ...editingEntry, milk_litres: event.target.value })} />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">Chapati
+                      <input type="number" min="0" step="1" className={inputClass} value={editingEntry.chapati_count} onChange={(event) => setEditingEntry({ ...editingEntry, chapati_count: event.target.value })} />
+                    </label>
+                  </>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setEditingEntry(null)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={savingEntry} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{savingEntry ? 'Saving…' : 'Save changes'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
       )}
     </div>
   );
