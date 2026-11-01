@@ -41,16 +41,32 @@ async function runTests() {
     if (compObj.is_active !== 1) throw new Error('Company should be active by default');
     console.log('Company Master checks passed.');
 
+    console.log('\n--- Testing Company Deletion ---');
+    await run('DELETE FROM companies WHERE id = ?', [companyId]);
+    const deletedCompany = await get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (deletedCompany) throw new Error('Company deletion failed');
+    const deletedRate = await get('SELECT * FROM company_rates WHERE company_id = ?', [companyId]);
+    if (deletedRate) throw new Error('Company rate row was not cascaded on company delete');
+    console.log('Company deletion checks passed.');
+
+    // Recreate a company for the remaining billing tests
+    const compResult2 = await run(
+      `INSERT INTO companies (name, address, contact_person, mobile_number) 
+       VALUES (?, ?, ?, ?)`,
+      ['Test Company Ltd', '123 Business Park, City', 'John Doe', '9876543210']
+    );
+    const companyId2 = compResult2.id;
+
     // 3. Test Company Rates Setup
     console.log('\n--- Testing Company Rate Setup ---');
     await run(
       `INSERT INTO company_rates (
         company_id, regular_tiffin_rate, dahi_tiffin_rate, nasta_rate, tea_rate, milk_rate, chapati_rate
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [companyId, 80.00, 100.00, 30.00, 10.00, 60.00, 5.00]
+      [companyId2, 80.00, 100.00, 30.00, 10.00, 60.00, 5.00]
     );
     
-    const rates = await get('SELECT * FROM company_rates WHERE company_id = ?', [companyId]);
+    const rates = await get('SELECT * FROM company_rates WHERE company_id = ?', [companyId2]);
     if (rates.regular_tiffin_rate !== 80.00) throw new Error('Regular Tiffin Rate mismatch');
     if (rates.milk_rate !== 60.00) throw new Error('Milk Rate mismatch');
     console.log('Rates Setup checks passed.');
@@ -62,12 +78,12 @@ async function runTests() {
     await run(
       `INSERT INTO tiffin_entries (company_id, entry_date, requisition_no, regular_tiffin_count, dahi_tiffin_count)
        VALUES (?, ?, ?, ?, ?)`,
-      [companyId, '2026-08-01', 'TIF-001', 50, 10]
+      [companyId2, '2026-08-01', 'TIF-001', 50, 10]
     );
     await run(
       `INSERT INTO tiffin_entries (company_id, entry_date, requisition_no, regular_tiffin_count, dahi_tiffin_count)
        VALUES (?, ?, ?, ?, ?)`,
-      [companyId, '2026-08-02', 'TIF-002', 55, 12]
+      [companyId2, '2026-08-02', 'TIF-002', 55, 12]
     );
 
     // Edit an entry
@@ -76,11 +92,11 @@ async function runTests() {
       `UPDATE tiffin_entries 
        SET regular_tiffin_count = 60, dahi_tiffin_count = 15 
        WHERE company_id = ? AND entry_date = ? AND requisition_no = ?`,
-      [companyId, '2026-08-02', 'TIF-002']
+      [companyId2, '2026-08-02', 'TIF-002']
     );
 
     // Verify totals
-    const tiffinBill = await calculateTiffinBill(companyId, 8, 2026);
+    const tiffinBill = await calculateTiffinBill(companyId2, 8, 2026);
     console.log('Tiffin Bill calculations:');
     console.log(`- Regular Count: ${tiffinBill.totals.regularTiffinCount} (Expected: 110)`);
     console.log(`- Dahi Count: ${tiffinBill.totals.dahiTiffinCount} (Expected: 25)`);
@@ -99,7 +115,7 @@ async function runTests() {
       await run(
         `INSERT INTO tiffin_entries (company_id, entry_date, requisition_no, regular_tiffin_count, dahi_tiffin_count)
          VALUES (?, ?, ?, ?, ?)`,
-        [companyId, '2026-08-01', 'TIF-001', 10, 5]
+        [companyId2, '2026-08-01', 'TIF-001', 10, 5]
       );
       throw new Error('Duplicate entry was saved without triggering SQLite constraint!');
     } catch (err) {
@@ -117,15 +133,15 @@ async function runTests() {
     await run(
       `INSERT INTO refreshment_entries (company_id, entry_date, requisition_no, nasta_count, tea_count, milk_litres, chapati_count)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [companyId, '2026-08-01', 'REF-001', 50, 60, 3.50, 100]
+      [companyId2, '2026-08-01', 'REF-001', 50, 60, 3.50, 100]
     );
     await run(
       `INSERT INTO refreshment_entries (company_id, entry_date, requisition_no, nasta_count, tea_count, milk_litres, chapati_count)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [companyId, '2026-08-02', 'REF-002', 55, 70, 4.25, 120]
+      [companyId2, '2026-08-02', 'REF-002', 55, 70, 4.25, 120]
     );
 
-    const refBill = await calculateRefreshmentBill(companyId, 8, 2026);
+    const refBill = await calculateRefreshmentBill(companyId2, 8, 2026);
     console.log('Refreshment Bill calculations:');
     console.log(`- Nasta Count: ${refBill.totals.nastaCount} (Expected: 105)`);
     console.log(`- Tea Count: ${refBill.totals.teaCount} (Expected: 130)`);

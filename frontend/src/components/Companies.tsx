@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Building2, Pencil, Plus, Search, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Building2, Pencil, Plus, Search, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
 import { requestJson } from './api';
 
 type Props = { API_BASE: string };
@@ -100,6 +100,22 @@ export default function Companies({ API_BASE }: Props) {
     }
   }
 
+  async function deleteCompany(company: Company) {
+    if (!window.confirm(`Delete ${company.name}? This will also remove its saved rates and entries.`)) return;
+    setError('');
+    setNotice('');
+    try {
+      await requestJson<{ id: number; deleted: boolean }>(`${API_BASE}/companies/${company.id}`, {
+        method: 'DELETE',
+      });
+      if (editingId === company.id) resetForm();
+      setNotice(`${company.name} deleted.`);
+      await loadCompanies();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete company.');
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -189,6 +205,9 @@ export default function Companies({ API_BASE }: Props) {
                         <button onClick={() => startEdit(company)} aria-label={`Edit ${company.name}`} className="rounded-md p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Pencil className="h-4 w-4" /></button>
                         <button onClick={() => void toggleCompany(company)} aria-label={`${company.is_active === 1 ? 'Deactivate' : 'Activate'} ${company.name}`} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
                           {company.is_active === 1 ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                        </button>
+                        <button onClick={() => void deleteCompany(company)} aria-label={`Delete ${company.name}`} className="rounded-md p-2 text-red-500 hover:bg-red-50 hover:text-red-700">
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>

@@ -137,6 +137,20 @@ router.patch('/companies/:id/toggle', async (req, res) => {
   }
 });
 
+// DELETE company
+router.delete('/companies/:id', async (req, res) => {
+  try {
+    const current = await get('SELECT id FROM companies WHERE id = ?', [req.params.id]);
+    if (!current) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    await run('DELETE FROM companies WHERE id = ?', [req.params.id]);
+    res.json({ id: parseInt(req.params.id, 10), deleted: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ==========================================
 // 2. COMPANY RATES ROUTES
