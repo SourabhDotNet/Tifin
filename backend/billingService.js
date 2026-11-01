@@ -45,7 +45,7 @@ export async function calculateTiffinBill(companyId, month, year) {
   const entries = await all(
     `SELECT * FROM tiffin_entries 
      WHERE company_id = ? AND entry_date LIKE ? 
-     ORDER BY entry_date ASC, requisition_no ASC`,
+    ORDER BY entry_date ASC, requisition_no ASC`,
     [companyId, datePrefix]
   );
 
@@ -138,7 +138,7 @@ export async function calculateRefreshmentBill(companyId, month, year) {
   const entries = await all(
     `SELECT * FROM refreshment_entries 
      WHERE company_id = ? AND entry_date LIKE ? 
-     ORDER BY entry_date ASC, requisition_no ASC`,
+    ORDER BY entry_date ASC, requisition_no ASC`,
     [companyId, datePrefix]
   );
 

@@ -143,18 +143,20 @@ export function generateBillPDF(billData, stream) {
   currentY += 20;
 
   // Render Table Rows
-  billData.entries.forEach((entry) => {
+  billData.entries.forEach((entry, index) => {
     // Page break logic (A4 height is 842, margin is 36, let's break around 750)
-    if (currentY > 730) {
+    const startsNewPage = currentY > 730;
+    if (startsNewPage) {
       doc.addPage();
       currentY = 36;
       drawRow(currentY, colHeaders, true);
       currentY += 20;
     }
 
+    const showDate = startsNewPage || index === 0 || billData.entries[index - 1].date !== entry.date;
     const rowData = isTiffin
-      ? [entry.date, entry.requisitionNo, entry.regularTiffinCount, entry.dahiTiffinCount]
-      : [entry.date, entry.requisitionNo, entry.nastaCount, entry.teaCount, entry.milkLitres.toFixed(2), entry.chapatiCount];
+      ? [showDate ? entry.date : '', entry.requisitionNo, entry.regularTiffinCount, entry.dahiTiffinCount]
+      : [showDate ? entry.date : '', entry.requisitionNo, entry.nastaCount, entry.teaCount, entry.milkLitres.toFixed(2), entry.chapatiCount];
 
     drawRow(currentY, rowData, false);
     currentY += 20;

@@ -252,7 +252,7 @@ router.get('/tiffin-entries', async (req, res) => {
       params.push(`%${requisition_no}%`);
     }
 
-    sql += ' ORDER BY t.entry_date DESC, t.requisition_no DESC';
+    sql += ' ORDER BY t.entry_date ASC, t.requisition_no ASC';
     const entries = await all(sql, params);
     res.json(entries);
   } catch (error) {
@@ -269,7 +269,6 @@ router.post('/tiffin-entries', async (req, res) => {
     if (!company_id) return res.status(400).json({ error: 'Company is required' });
     if (!entry_date) return res.status(400).json({ error: 'Date is required' });
     if (!requisition_no || !requisition_no.trim()) return res.status(400).json({ error: 'Requisition Number is required' });
-
     const regular = parseInt(regular_tiffin_count || 0, 10);
     const dahi = parseInt(dahi_tiffin_count || 0, 10);
 
@@ -413,7 +412,7 @@ router.get('/refreshment-entries', async (req, res) => {
       params.push(`%${requisition_no}%`);
     }
 
-    sql += ' ORDER BY r.entry_date DESC, r.requisition_no DESC';
+    sql += ' ORDER BY r.entry_date ASC, r.requisition_no ASC';
     const entries = await all(sql, params);
     res.json(entries);
   } catch (error) {
@@ -430,7 +429,6 @@ router.post('/refreshment-entries', async (req, res) => {
     if (!company_id) return res.status(400).json({ error: 'Company is required' });
     if (!entry_date) return res.status(400).json({ error: 'Date is required' });
     if (!requisition_no || !requisition_no.trim()) return res.status(400).json({ error: 'Requisition Number is required' });
-
     const nasta = parseInt(nasta_count || 0, 10);
     const tea = parseInt(tea_count || 0, 10);
     const milk = parseFloat(milk_litres || 0.0);
